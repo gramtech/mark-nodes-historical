@@ -16,11 +16,15 @@
             },
             {
                 "Name": "ControllerURL",
-                "Value": "http://controller-2060nosshco-o3wdq4ip.appd-cx.com:8090"
+                "Value": "https://tpicap-dev.saas.appdynamics.com:443"
             },
             {
-                "Name": "OAuthToken", 
-                "Value": ""   
+                "Name": "APIClient", 
+                "Value": "api-client"   
+            },
+            {
+                "Name": "APISecret", 
+                "Value": "api-secret"   
             },
             {
                 "Name": "ApplicationList", 

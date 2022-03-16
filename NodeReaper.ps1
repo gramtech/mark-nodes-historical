@@ -25,6 +25,7 @@ Function Write-Log {
 
     $Stamp = (Get-Date).toString("yyyy/MM/dd HH:mm:ss")
     $Line = "$Stamp $Level $Message"
+
     if ($logfile) {
         Add-Content $logfile -Value $Line
     }
@@ -32,6 +33,7 @@ Function Write-Log {
         Write-Output $Line
     }
 }
+
 #Checking for existence of logfolders and files if not create them.
 if (!(Test-Path $LogDir)) {
     New-Item -Path $LogDir -ItemType directory
@@ -49,14 +51,16 @@ $confFileContent = (Get-Content $confFile -Raw) | ConvertFrom-Json
 # Give preferenece to env varible 
 
 # APPDYNAMICS_CONTROLLER_URL 
-# APPDYNAMICS_OAUTH_TOKEN
+# APPDYNAMICS_API_CLIENT
+# APPDYNAMICS_API_SECRET
 # APPDYNAMICS_NODE_AVAILABILITY_THRESHOLD
 # APPDYNAMICS_EXECUTION_FREQUENCY
 # APPDYNAMICS_TARGET_APPLICATIONS
 # APPDYNAMICS_EXECUTE_ONCE_OR_CONTINUOUS
 
 $controllerURL = ${env:APPDYNAMICS_CONTROLLER_URL}
-$OAuthToken = ${env:APPDYNAMICS_OAUTH_TOKEN}
+$APIClient = ${env:APPDYNAMICS_API_CLIENT}
+$APISecret = ${env:APPDYNAMICS_API_SECRET}
 $apps = ${env:APPDYNAMICS_TARGET_APPLICATIONS}
 $ThresholdInMintues = ${env:APPDYNAMICS_NODE_AVAILABILITY_THRESHOLD}
 $ExecutionFrequencyInMinutes = ${env:APPDYNAMICS_EXECUTION_FREQUENCY}
@@ -67,9 +71,14 @@ if ([string]::IsNullOrEmpty($controllerURL)) {
     $controllerURL = $confFileContent.ConfigItems | Where-Object { $_.Name -eq "ControllerURL" } | Select-Object -ExpandProperty Value
 }
 
-if ([string]::IsNullOrEmpty($OAuthToken)) {
+if ([string]::IsNullOrEmpty($APIClient)) {
     #default to config.file 
-    $OAuthToken = $confFileContent.ConfigItems | Where-Object { $_.Name -eq "OAuthToken" } | Select-Object -ExpandProperty Value
+    $APIClient = $confFileContent.ConfigItems | Where-Object { $_.Name -eq "APIClient" } | Select-Object -ExpandProperty Value
+}
+
+if ([string]::IsNullOrEmpty($APISecret)) {
+    #default to config.file 
+    $APISecret = $confFileContent.ConfigItems | Where-Object { $_.Name -eq "APISecret" } | Select-Object -ExpandProperty Value
 }
 
 if ([string]::IsNullOrEmpty($apps)) {
@@ -96,12 +105,13 @@ if ([string]::IsNullOrEmpty($JobType)) {
 }
 
 
-if ([string]::IsNullOrEmpty($controllerURL) -or [string]::IsNullOrEmpty($OAuthToken) -or [string]::IsNullOrEmpty($apps) -or [string]::IsNullOrEmpty($ThresholdInMintues) -or [string]::IsNullOrEmpty($ExecutionFrequencyInMinutes)) {
+if ([string]::IsNullOrEmpty($controllerURL) -or [string]::IsNullOrEmpty($APIClient) -or [string]::IsNullOrEmpty($APISecret) -or [string]::IsNullOrEmpty($apps) -or [string]::IsNullOrEmpty($ThresholdInMintues) -or [string]::IsNullOrEmpty($ExecutionFrequencyInMinutes)) {
   
     Write-Host "One or more required parameter value is/are missing" 
 
     Write-Host " Controller URL: $controllerURL "
-    Write-Host " OAuthToken: $OAuthToken "
+    Write-Host " APIClient: $APIClient "
+    Write-Host " APISecret: $APISecret "
     Write-Host " Target Applications : $apps"
     Write-Host " ThresholdInMintues : $ThresholdInMintues"
     Write-Host " ExecutionFrequencyInMinutes : $ExecutionFrequencyInMinutes"
@@ -124,9 +134,26 @@ if ($SleepTime -gt 2147483) {
     Write-Host "The ExecutionFrequencyInMinutes value, $ExecutionFrequencyInMinutes ($SleepTime)secs is greater than the maximum allowed value of 35791 minutes in Powershell." -ForegroundColor RED
     break
 }
+
+# Generate the Token Through an API 
+$contentType = "application/vnd.appd.cntrl+protobuf;v=1"
+$endpoint_post_token = “$controllerURL/controller/api/oauth/access_token”
+$body_creds = @{
+    grant_type = "client_credentials"
+    client_id = "gc-node-cleanup@tpicap-dev"
+    client_secret = "6b15a4d0-3dc9-48aa-9c72-c5dff7e0958c"
+} 
+
+$OAuthTokenObjects = Invoke-RestMethod -Uri $endpoint_post_token -Method Post -ContentType $contentType -Body $body_creds
+
+$OAuthToken = ($OAuthTokenObjects | Select-Object -ExpandProperty "access_token")
+Write-Host $OAuthToken
+
+
+# Use temp bearer token retrieved from API
 $JWTToken = "Bearer $OAuthToken"
 $historicalEndPoint = "$controllerURL/controller/rest/mark-nodes-historical?application-component-node-ids"
-$headers = @{Authorization = $JWTToken }
+$headers = @{Authorization = $JWTToken}
 $endpoint_get_applications = "$controllerURL/controller/rest/applications?output=json"
 
 While ($true) {
@@ -209,6 +236,7 @@ While ($true) {
         }
         Start-Sleep -Seconds 2
     }#End While Loop 
+
     Write-Host "Applying JobType instruction... you selected type = $JobType"
     if ($JobType -like "once" -or $JobType -like "one") {
         Write-Host "Completed. Stopping..".  
@@ -219,5 +247,4 @@ While ($true) {
         Write-Host "Going to sleep for $SleepTime before trying again"
         Start-Sleep -Seconds $SleepTime
     }
-   
 }
