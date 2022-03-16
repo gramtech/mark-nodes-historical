@@ -16,7 +16,7 @@
             },
             {
                 "Name": "ControllerURL",
-                "Value": "https://tpicap-dev.saas.appdynamics.com:443"
+                "Value": "http://mycontroller.saas.appdynamics.com:443"
             },
             {
                 "Name": "APIClient", 
