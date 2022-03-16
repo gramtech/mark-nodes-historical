@@ -147,8 +147,6 @@ $body_creds = @{
 $OAuthTokenObjects = Invoke-RestMethod -Uri $endpoint_post_token -Method Post -ContentType $contentType -Body $body_creds
 
 $OAuthToken = ($OAuthTokenObjects | Select-Object -ExpandProperty "access_token")
-Write-Host $OAuthToken
-
 
 # Use temp bearer token retrieved from API
 $JWTToken = "Bearer $OAuthToken"
